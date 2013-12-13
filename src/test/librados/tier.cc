@@ -318,7 +318,7 @@ TEST(LibRadosTier, Evict) {
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "foo", completion, &op, librados::OPERATION_IGNORE_OVERLAY));
+      "foo", completion, &op, librados::OPERATION_IGNORE_CACHE));
     completion->wait_for_safe();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
@@ -329,7 +329,7 @@ TEST(LibRadosTier, Evict) {
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "fooberdoodle", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_CACHE));
     completion->wait_for_safe();
     ASSERT_EQ(-ENOENT, completion->get_return_value());
     completion->release();
@@ -340,7 +340,7 @@ TEST(LibRadosTier, Evict) {
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "bar", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_CACHE));
     completion->wait_for_safe();
     ASSERT_EQ(-EBUSY, completion->get_return_value());
     completion->release();
