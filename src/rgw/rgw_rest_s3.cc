@@ -980,6 +980,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
       ldout(s->cct, 0) << "Signature verification failed!" << dendl;
       ldout(s->cct, 0) << "expected: " << signature_str.c_str() << dendl;
       ldout(s->cct, 0) << "got: " << encoded_hmac.c_str() << dendl;
+      ldout(s->cct, 20) << "policy: '" << encoded_policy << "'" << dendl;
+      ldout(s->cct, 20) << "s3_secret_key: '" << s3_secret_key << "'" << dendl;
       err_msg = "Bad access key / signature";
       return -EACCES;
     }
