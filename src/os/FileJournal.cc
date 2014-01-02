@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "acconfig.h"
 
 #include "common/debug.h"
 #include "common/errno.h"
@@ -258,6 +259,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 	   << newsize << " bytes: " << cpp_strerror(err) << dendl;
       return -err;
     }
+#ifdef HAVE_POSIX_FALLOCATE
     ret = ::posix_fallocate(fd, 0, newsize);
     if (ret) {
       derr << "FileJournal::_open_file : unable to preallocation journal to "
@@ -265,6 +267,24 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
       return -ret;
     }
     max_size = newsize;
+#elif defined(__APPLE__)
+    fstore_t store;
+    store.fst_flags = F_ALLOCATECONTIG;
+    store.fst_posmode = F_PEOFPOSMODE;
+    store.fst_offset = 0;
+    store.fst_length = newsize;
+
+    ret = ::fcntl(fd, F_PREALLOCATE, &store);
+    if (ret == -1) {
+      ret = -errno;
+      derr << "FileJournal::_open_file : unable to preallocation journal to "
+	   << newsize << " bytes: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+    max_size = newsize;
+#else
+# error "Journal pre-allocation not supported on platform."
+#endif
   }
   else {
     max_size = oldsize;
@@ -1587,11 +1607,7 @@ void FileJournal::wrap_read_bl(
     else
       len = olen;                         // rest
     
-#ifdef DARWIN
-    int64_t actual = ::lseek(fd, pos, SEEK_SET);
-#else
     int64_t actual = ::lseek64(fd, pos, SEEK_SET);
-#endif
     assert(actual == pos);
     
     bufferptr bp = buffer::create(len);
@@ -1795,22 +1811,14 @@ void FileJournal::corrupt(
   if (corrupt_at >= header.max_size)
     corrupt_at = corrupt_at + get_top() - header.max_size;
 
-#ifdef DARWIN
-    int64_t actual = ::lseek(fd, corrupt_at, SEEK_SET);
-#else
     int64_t actual = ::lseek64(fd, corrupt_at, SEEK_SET);
-#endif
     assert(actual == corrupt_at);
 
     char buf[10];
     int r = safe_read_exact(fd, buf, 1);
     assert(r == 0);
 
-#ifdef DARWIN
-    actual = ::lseek(wfd, corrupt_at, SEEK_SET);
-#else
     actual = ::lseek64(wfd, corrupt_at, SEEK_SET);
-#endif
     assert(actual == corrupt_at);
 
     buf[0]++;

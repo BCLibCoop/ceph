@@ -227,11 +227,8 @@ int CrushCompiler::decompile(ostream &out)
     out << "\truleset " << crush.get_rule_mask_ruleset(i) << "\n";
 
     switch (crush.get_rule_mask_type(i)) {
-    case CEPH_PG_TYPE_REP:
+    case CEPH_PG_TYPE_REPLICATED:
       out << "\ttype replicated\n";
-      break;
-    case CEPH_PG_TYPE_RAID4:
-      out << "\ttype raid4\n";
       break;
     case CEPH_PG_TYPE_ERASURE:
       out << "\ttype erasure\n";
@@ -586,9 +583,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
   string tname = string_node(i->children[start+2]);
   int type;
   if (tname == "replicated")
-    type = CEPH_PG_TYPE_REP;
-  else if (tname == "raid4")
-    type = CEPH_PG_TYPE_RAID4;
+    type = CEPH_PG_TYPE_REPLICATED;
   else if (tname == "erasure")
     type = CEPH_PG_TYPE_ERASURE;
   else 

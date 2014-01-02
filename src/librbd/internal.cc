@@ -616,8 +616,11 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    if (is_unprotected)
+    if (is_unprotected) {
+      lderr(ictx->cct) << "snap_unprotect: snapshot is already unprotected"
+		       << dendl;
       return -EINVAL;
+    }
 
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
@@ -1246,6 +1249,13 @@ reprotect_and_return_err:
     // since we don't know the image and snapshot name, set their ids and
     // reset the snap_name and snap_exists fields after we read the header
     ictx->parent = new ImageCtx("", parent_image_id, NULL, p_ioctx, true);
+
+    // set rados flags for reading the parent image
+    if (ictx->cct->_conf->rbd_balance_parent_reads)
+      ictx->parent->set_read_flag(librados::OPERATION_BALANCE_READS);
+    else if (ictx->cct->_conf->rbd_localize_parent_reads)
+      ictx->parent->set_read_flag(librados::OPERATION_LOCALIZE_READS);
+
     r = open_image(ictx->parent);
     if (r < 0) {
       lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)

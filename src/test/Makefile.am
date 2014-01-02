@@ -167,11 +167,13 @@ ceph_omapbench_SOURCES = test/omap_bench.cc
 ceph_omapbench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_omapbench
 
+if LINUX
 ceph_kvstorebench_SOURCES = \
 	test/kv_store_bench.cc \
 	key_value_store/kv_flat_btree_async.cc
 ceph_kvstorebench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_kvstorebench
+endif
 
 ceph_multi_stress_watch_SOURCES = \
 	test/multi_stress_watch.cc \
@@ -179,9 +181,13 @@ ceph_multi_stress_watch_SOURCES = \
 ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch 
 
-
-
-
+ceph_erasure_code_benchmark_SOURCES = \
+	test/osd/ceph_erasure_code_benchmark.cc
+ceph_erasure_code_benchmark_LDADD = $(LIBOSD) $(LIBCOMMON) $(BOOST_PROGRAM_OPTIONS_LIBS) $(CEPH_GLOBAL)
+if LINUX
+ceph_erasure_code_benchmark_LDADD += -ldl
+endif
+bin_DEBUGPROGRAMS += ceph_erasure_code_benchmark
 
 
 ## System tests
@@ -235,6 +241,7 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 check_SCRIPTS += \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
+	test/mon/osd-pool-create.sh \
 	test/vstart_wrapped_tests.sh
 
 # target to build but not run the unit tests
@@ -263,6 +270,16 @@ unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bloom_filter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bloom_filter
+
+unittest_str_map_SOURCES = test/common/test_str_map.cc
+unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_str_map
+
+unittest_crushwrapper_SOURCES = test/test_crushwrapper.cc
+unittest_crushwrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_crushwrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
+check_PROGRAMS += unittest_crushwrapper
 
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -635,10 +652,12 @@ ceph_test_librbd_LDADD = $(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
 
+if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c
 ceph_test_librbd_fsx_LDADD = $(LIBRBD) $(LIBRADOS) -lm
 ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
+endif
 
 ceph_test_cls_rbd_SOURCES = \
 	test/cls_rbd/test_cls_rbd.cc \
@@ -807,10 +826,12 @@ ceph_test_libcephfs_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
 ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
 
+if LINUX
 ceph_test_filestore_SOURCES = test/filestore/store_test.cc
 ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_filestore
+endif
 
 ceph_test_filestore_workloadgen_SOURCES = \
 	test/filestore/workload_generator.cc \
@@ -895,6 +916,7 @@ noinst_HEADERS += \
 	test/osd/RadosModel.h \
 	test/osd/Object.h \
 	test/osd/TestOpStat.h \
+	test/osd/ceph_erasure_code_benchmark.h \
 	test/bench/distribution.h \
 	test/bench/rados_backend.h \
 	test/bench/rbd_backend.h \

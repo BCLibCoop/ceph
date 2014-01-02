@@ -44,6 +44,7 @@
 
 #include "common/config.h"
 #include "common/perf_counters.h"
+#include "include/str_list.h"
 
 
 #define dout_subsys ceph_subsys_objecter
@@ -125,6 +126,35 @@ enum {
   l_osdc_osd_laggy,
   l_osdc_last,
 };
+
+
+// config obs ----------------------------
+
+static const char *config_keys[] = {
+  "crush_location",
+  NULL
+};
+
+const char** Objecter::get_tracked_conf_keys() const
+{
+  return config_keys;
+}
+
+
+void Objecter::handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed)
+{
+  if (changed.count("crush_location")) {
+    crush_location.clear();
+    vector<string> lvec;
+    get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
+    int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
+    if (r < 0) {
+      lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
+		 << "' does not parse" << dendl;
+    }
+  }
+}
 
 
 // messages ------------------------------
@@ -1381,7 +1411,8 @@ int Objecter::recalc_op_target(Op *op)
     need_check_tiering = true;
   }
   
-  if (honor_cache_redirects && need_check_tiering) {
+  if (need_check_tiering &&
+      (op->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
     const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
     if (pi) {
       if (is_read && pi->has_read_tier())
@@ -1433,23 +1464,33 @@ int Objecter::recalc_op_target(Op *op)
 	  op->used_replica = true;
 	osd = acting[p];
 	ldout(cct, 10) << " chose random osd." << osd << " of " << acting << dendl;
-      } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
-	// look for a local replica
-	int i;
-	/* loop through the OSD replicas and see if any are local to read from.
-	 * We don't need to check the primary since we default to it. (Be
-         * careful to preserve that default, which is why we iterate in reverse
-         * order.) */
-	for (i = acting.size()-1; i > 0; --i) {
-	  if (osdmap->get_addr(acting[i]).is_same_host(messenger->get_myaddr())) {
-	    op->used_replica = true;
-	    ldout(cct, 10) << " chose local osd." << acting[i] << " of " << acting << dendl;
-	    break;
+      } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS) &&
+		 acting.size() > 1) {
+	// look for a local replica.  prefer the primary if the
+	// distance is the same.
+	int best;
+	int best_locality;
+	for (unsigned i = 0; i < acting.size(); ++i) {
+	  int locality = osdmap->crush->get_common_ancestor_distance(
+		 cct, acting[i], crush_location);
+	  ldout(cct, 20) << __func__ << " localize: rank " << i
+			 << " osd." << acting[i]
+			 << " locality " << locality << dendl;
+	  if (i == 0 ||
+	      (locality >= 0 && best_locality >= 0 &&
+	       locality < best_locality) ||
+	      (best_locality < 0 && locality >= 0)) {
+	    best = i;
+	    best_locality = locality;
+	    if (i)
+	      op->used_replica = true;
 	  }
 	}
-	osd = acting[i];
-      } else
+	assert(best >= 0);
+	osd = acting[best];
+      } else {
 	osd = acting[0];
+      }
       s = get_session(osd);
     }
 
@@ -1770,8 +1811,24 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
-void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
+uint32_t Objecter::list_objects_seek(ListContext *list_context,
+				     uint32_t pos)
+{
+  assert(client_lock.is_locked());
+  pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
+  ldout(cct, 10) << "list_objects_seek " << list_context
+		 << " pos " << pos << " -> " << actual << dendl;
+  list_context->current_pg = actual.ps();
+  list_context->cookie = collection_list_handle_t();
+  list_context->at_end_of_pg = false;
+  list_context->at_end_of_pool = false;
+  list_context->current_pg_epoch = 0;
+  return list_context->current_pg;
+}
 
+void Objecter::list_objects(ListContext *list_context, Context *onfinish)
+{
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "list_objects" << dendl;
   ldout(cct, 20) << " pool_id " << list_context->pool_id
 	   << " pool_snap_seq " << list_context->pool_snap_seq

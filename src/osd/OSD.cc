@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "acconfig.h"
 
 #include <fstream>
 #include <iostream>
@@ -21,10 +22,13 @@
 #include <ctype.h>
 #include <boost/scoped_ptr.hpp>
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
+#endif
+
+#ifdef HAVE_SYS_MOUNT_H
 #include <sys/mount.h>
-#endif // DARWIN || __FreeBSD__
+#endif
 
 #include "osd/PG.h"
 
@@ -159,6 +163,7 @@ CompatSet OSD::get_osd_compat_set() {
   CompatSet compat =  get_osd_initial_compat_set();
   //Any features here can be set in code, but not in initial superblock
   compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+  compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_ERASURECODES);
   return compat;
 }
 
@@ -434,7 +439,6 @@ void OSDService::init()
     objecter_timer.init();
     objecter->set_client_incarnation(0);
     objecter->init_locked();
-    objecter->unset_honor_cache_redirects();
   }
   watch_timer.init();
 }
@@ -1693,7 +1697,7 @@ PG* OSD::_make_pg(
   PG *pg;
   hobject_t logoid = make_pg_log_oid(pgid);
   hobject_t infooid = make_pg_biginfo_oid(pgid);
-  if (createmap->get_pg_type(pgid) == pg_pool_t::TYPE_REP)
+  if (createmap->get_pg_type(pgid) == pg_pool_t::TYPE_REPLICATED)
     pg = new ReplicatedPG(&service, createmap, pool, pgid, logoid, infooid);
   else 
     assert(0);
@@ -5373,6 +5377,16 @@ void OSD::check_osdmap_features()
       p.features_required = (p.features_required & ~mask) | features;
       cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
     }
+  }
+
+  if ((features & CEPH_FEATURE_OSD_ERASURE_CODES) &&
+      (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_ERASURECODES))) {
+    dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
+    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_ERASURECODES);
+    ObjectStore::Transaction t;
+    write_superblock(t);
+    int err = store->apply_transaction(t);
+    assert(err == 0);
   }
 }
 

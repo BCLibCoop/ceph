@@ -14,6 +14,8 @@ extern "C" {
 #include <string.h>
 #include "rados_types.h"
 
+#include <sys/time.h>
+
 #ifndef CEPH_OSD_TMAP_SET
 /* These are also defined in rados.h and objclass.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'
@@ -708,6 +710,15 @@ int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
  * @returns current hash position, rounded to the current pg
  */
 uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
+
+/**
+ * Reposition object iterator to a different hash position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param pos hash position to move to
+ * @returns actual (rounded) position we moved to
+ */
+uint32_t rados_objects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
 
 /**
  * Get the next object name and locator in the pool

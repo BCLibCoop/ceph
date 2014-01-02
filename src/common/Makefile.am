@@ -29,6 +29,7 @@ libcommon_la_SOURCES = \
 	common/safe_io.c \
 	common/snap_types.cc \
 	common/str_list.cc \
+	common/str_map.cc \
 	common/errno.cc \
 	common/RefCountedObj.cc \
 	common/blkdev.cc \
@@ -66,12 +67,12 @@ libcommon_la_SOURCES = \
 	common/ceph_frag.cc \
 	common/addr_parsing.c \
 	common/hobject.cc \
-	common/bloom_filter.cc
+	common/bloom_filter.cc \
+	common/linux_version.c
 
 if LINUX
 libcommon_la_SOURCES += \
-	common/secret.c \
-	common/linux_version.c
+	common/secret.c
 endif
 
 # these should go out of libcommon
